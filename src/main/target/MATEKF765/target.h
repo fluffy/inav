@@ -89,8 +89,9 @@
 
 #define PITOT_I2C_BUS           BUS_I2C2
 
-#define USE_RANGEFINDER
+//#define USE_RANGEFINDER  // this is in target/common.h
 #define RANGEFINDER_I2C_BUS     BUS_I2C2
+//#define USE_RANGEFINDER_HCSR04_I2C // this is in target/common.h
 
 // *************** SPI2 OSD ***********************
 #define USE_SPI_DEVICE_2

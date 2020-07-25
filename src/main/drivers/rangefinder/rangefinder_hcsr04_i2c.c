@@ -24,6 +24,8 @@
 
 #include "build/build_config.h"
 
+#include "common/log.h"
+
 #include "drivers/time.h"
 #include "drivers/bus_i2c.h"
 
@@ -67,6 +69,8 @@ void hcsr04i2cUpdate(rangefinderDev_t *rangefinder)
             (int32_t)((int32_t)response[HCSR04_I2C_REGISTRY_DISTANCE_HIGH] << 8) +
             response[HCSR04_I2C_REGISTRY_DISTANCE_LOW];
 
+	// LOG_D( RANGE, "HCSR04 I2C reading range %ld cm", hcsr04i2cMeasurementCm ); 
+
     } else {
         /*
          * Rangefinder is reporting out-of-range situation
@@ -92,6 +96,7 @@ static bool deviceDetect(busDevice_t * busDev)
 
         bool ack = busRead(busDev, HCSR04_I2C_REGISTRY_STATUS, &inquiryResult);
         if (ack) {
+	   LOG_D( RANGE, "Found HCSR04 I2C range sensor" );
             return true;
         }
     };

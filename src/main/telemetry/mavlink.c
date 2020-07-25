@@ -32,6 +32,7 @@
 #include "build/debug.h"
 
 #include "common/axis.h"
+#include "common/log.h"
 #include "common/color.h"
 #include "common/maths.h"
 #include "common/utils.h"
@@ -67,6 +68,7 @@
 #include "sensors/gyro.h"
 #include "sensors/pitotmeter.h"
 #include "sensors/sensors.h"
+#include "sensors/rangefinder.h"
 
 #include "telemetry/mavlink.h"
 #include "telemetry/telemetry.h"
@@ -213,12 +215,15 @@ void mavlinkSendSystemStatus(void)
     0001000000000100    With Mag  = 4100
     0010000000001000    With Baro = 8200
     0100000000100000    With GPS  = 16416
+    0000000100000000    With Laser= 256 // TODO should this have bit 13 too ?
     0000001111111111
     */
 
     if (sensors(SENSOR_MAG))  onboardControlAndSensors |=  4100;
     if (sensors(SENSOR_BARO)) onboardControlAndSensors |=  8200;
     if (sensors(SENSOR_GPS))  onboardControlAndSensors |= 16416;
+    if (sensors(SENSOR_RANGEFINDER)) onboardControlAndSensors |= 256;
+    // TODO - add all the other sensor types 
 
     mavlink_msg_sys_status_pack(mavSystemId, mavComponentId, &mavSendMsg,
         // onboard_control_sensors_present Bitmask showing which onboard controllers and sensors are present.
@@ -386,6 +391,27 @@ void mavlinkSendAttitude(void)
     mavlinkSendMessage();
 }
 
+void mavlinkSendDistance(void) 
+{
+   uint16_t distanceInCm = (uint16_t) rangefinderGetLatestAltitude();
+
+   LOG_D( RANGE, "Mavlink send range %d cm", distanceInCm );
+
+   mavlink_msg_distance_sensor_pack(mavSystemId, mavComponentId, &mavSendMsg,
+				    millis(), // boot time,
+				    0, //uint16_t min_distance, min_distance Minimum distance the sensor can measure in centimeters
+				    0, // uint16_t max_distance, max_distance Maximum distance the sensor can measure in centimeters
+				    distanceInCm, // TODO , // uint16_t current_distance, current_distance Current distance reading
+				    MAV_DISTANCE_SENSOR_LASER, //uint8_t type, type Type from MAV_DISTANCE_SENSOR enum.
+				    0,// uint8_t id, id Onboard ID of the sensor
+				    MAV_SENSOR_ROTATION_NONE, // uint8_t orientation,Direction the sensor faces from MAV_SENSOR_ORIENTATION enum.
+				    0 //uint8_t covariance covariance Measurement covariance in centimeters, 0 for unknown / invalid readings
+				    );
+
+
+    mavlinkSendMessage();
+}
+
 void mavlinkSendHUDAndHeartbeat(void)
 {
     float mavAltitude = 0;
@@ -531,6 +557,9 @@ void processMAVLinkTelemetry(timeUs_t currentTimeUs)
 
     if (mavlinkStreamTrigger(MAV_DATA_STREAM_EXTRA1)) {
         mavlinkSendAttitude();
+#ifdef USE_RANGEFINDER
+	mavlinkSendDistance();
+#endif
     }
 
     if (mavlinkStreamTrigger(MAV_DATA_STREAM_EXTRA2)) {

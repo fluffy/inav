@@ -25,6 +25,7 @@
 #include "build/build_config.h"
 #include "build/debug.h"
 
+#include "common/log.h"
 #include "common/maths.h"
 #include "common/utils.h"
 #include "common/time.h"
@@ -266,6 +267,10 @@ bool rangefinderProcess(float cosTiltAngle)
     } else {
         rangefinder.calculatedAltitude = rangefinder.rawAltitude * cosTiltAngle;
     }
+
+    //LOG_D( RANGE, "cosTiltAngle = %f ", (double)(cosTiltAngle) );
+    //LOG_D( RANGE, "rangefinder.rawAltitude = %ld " , rangefinder.rawAltitude );
+    LOG_D( RANGE, "rangefinder.calculatedAltitude = %ld " , rangefinder.calculatedAltitude );
 
     return true;
 }
