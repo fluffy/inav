@@ -270,7 +270,7 @@ bool rangefinderProcess(float cosTiltAngle)
 
     //LOG_D( RANGE, "cosTiltAngle = %f ", (double)(cosTiltAngle) );
     //LOG_D( RANGE, "rangefinder.rawAltitude = %ld " , rangefinder.rawAltitude );
-    LOG_D( RANGE, "rangefinder.calculatedAltitude = %ld " , rangefinder.calculatedAltitude );
+    //LOG_D( RANGE, "rangefinder.calculatedAltitude = %ld " , rangefinder.calculatedAltitude );
 
     return true;
 }

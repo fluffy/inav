@@ -26,6 +26,7 @@
 #include "common/axis.h"
 #include "common/color.h"
 #include "common/utils.h"
+#include "common/log.h"
 #include "common/logic_condition.h"
 #include "common/global_functions.h"
 
@@ -195,15 +196,22 @@ void taskUpdateRangefinder(timeUs_t currentTimeUs)
 {
     UNUSED(currentTimeUs);
 
+    //LOG_D( RANGE , "in taskUpdateRangefinder" );
+      
     if (!sensors(SENSOR_RANGEFINDER))
         return;
 
     // Update and adjust task to update at required rate
     const uint32_t newDeadline = rangefinderUpdate();
-    if (newDeadline != 0) {
-        rescheduleTask(TASK_SELF, newDeadline);
-    }
 
+#if 0 // TODO REMOVE
+    rescheduleTask(TASK_SELF, 1000*1000 );
+#else
+    if (newDeadline != 0) {
+         rescheduleTask(TASK_SELF, newDeadline);
+    }
+#endif
+    
     /*
      * Process raw rangefinder readout
      */
@@ -466,7 +474,7 @@ cfTask_t cfTasks[TASK_COUNT] = {
     [TASK_RANGEFINDER] = {
         .taskName = "RANGEFINDER",
         .taskFunc = taskUpdateRangefinder,
-        .desiredPeriod = TASK_PERIOD_MS(70),
+        .desiredPeriod = TASK_PERIOD_MS(700),
         .staticPriority = TASK_PRIORITY_MEDIUM,
     },
 #endif

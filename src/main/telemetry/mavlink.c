@@ -395,7 +395,7 @@ void mavlinkSendDistance(void)
 {
    uint16_t distanceInCm = (uint16_t) rangefinderGetLatestAltitude();
 
-   LOG_D( RANGE, "Mavlink send range %d cm", distanceInCm );
+   //LOG_D( RANGE, "Mavlink send range %d cm", distanceInCm );
 
    mavlink_msg_distance_sensor_pack(mavSystemId, mavComponentId, &mavSendMsg,
 				    millis(), // boot time,

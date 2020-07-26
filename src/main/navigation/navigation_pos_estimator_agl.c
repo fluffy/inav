@@ -32,12 +32,15 @@
 #include "build/build_config.h"
 #include "build/debug.h"
 
+#include "common/log.h"
+
 #if defined(USE_NAV)
 
 #include "navigation/navigation.h"
 #include "navigation/navigation_private.h"
 #include "navigation/navigation_pos_estimator_private.h"
 
+#include "sensors/acceleration.h"
 #include "sensors/rangefinder.h"
 #include "sensors/barometer.h"
 
@@ -48,12 +51,21 @@ extern navigationPosEstimator_t posEstimator;
  * Read surface and update alt/vel topic
  *  Function is called from TASK_RANGEFINDER at arbitrary rate - as soon as new measurements are available
  */
-void updatePositionEstimator_SurfaceTopic(timeUs_t currentTimeUs, float newSurfaceAlt)
+void updatePositionEstimator_SurfaceTopic(timeUs_t currentTimeUs, float newSurfaceAlt /* cm */ )
 {
     const float surfaceDtUs = currentTimeUs - posEstimator.surface.lastUpdateTime;
+
+    float surfaceAltChange = newSurfaceAlt - posEstimator.surface.alt;
+
+    if ( posEstimator.surface.lastUpdateTime == 0 ) {
+      surfaceAltChange = 0.0;
+    }
+      
     float newReliabilityMeasurement = 0;
     bool surfaceMeasurementWithinRange = false;
 
+    //LOG_D( RANGE , "in updatePositionEstimator_SurfaceTopic alt= %f cm" ,  (double)newSurfaceAlt );
+           
     posEstimator.surface.lastUpdateTime = currentTimeUs;
 
     if (newSurfaceAlt >= 0) {
@@ -61,6 +73,9 @@ void updatePositionEstimator_SurfaceTopic(timeUs_t currentTimeUs, float newSurfa
             newReliabilityMeasurement = 1.0f;
             surfaceMeasurementWithinRange = true;
             posEstimator.surface.alt = newSurfaceAlt;
+            posEstimator.surface.roc = surfaceAltChange / US2S( surfaceDtUs );
+            
+            //LOG_D( RANGE , "nav update alt to %f cm" ,  (double)posEstimator.surface.alt );
         }
         else {
             newReliabilityMeasurement = 0.0f;
@@ -83,14 +98,23 @@ void updatePositionEstimator_SurfaceTopic(timeUs_t currentTimeUs, float newSurfa
         // Update average sonar altitude if range is good
         if (surfaceMeasurementWithinRange) {
             pt1FilterApply3(&posEstimator.surface.avgFilter, newSurfaceAlt, surfaceDt);
+
+            //LOG_D( RANGE , "nav posEstimator.surface.alt = %f " ,  (double)posEstimator.surface.alt );
+            //LOG_D( RANGE , "nav posEstimator.est.aglAlt = %f" ,  (double)posEstimator.est.aglAlt);
+            //LOG_D( RANGE , "nav posEstimator.surface.reliability = %f" ,  (double)posEstimator.surface.reliability );
+            //LOG_D( RANGE , "nav posEstimator.est.aglQual = %d" ,  posEstimator.est.aglQual );
+                        
         }
     }
+
 }
 #endif
 
 void estimationCalculateAGL(estimationContext_t * ctx)
 {
 #if defined(USE_RANGEFINDER) && defined(USE_BARO)
+  float accWeight=0.0;
+  
     if ((ctx->newFlags & EST_SURFACE_VALID) && (ctx->newFlags & EST_BARO_VALID)) {
         navAGLEstimateQuality_e newAglQuality = posEstimator.est.aglQual;
         bool resetSurfaceEstimate = false;
@@ -149,19 +173,24 @@ void estimationCalculateAGL(estimationContext_t * ctx)
         }
 
         // Update estimate
-        const float accWeight = navGetAccelerometerWeight();
+        accWeight = navGetAccelerometerWeight();
+        // accWeight = 0.0; // TODO - FLUFFY - REMOVE 
         posEstimator.est.aglAlt += posEstimator.est.aglVel * ctx->dt;
-        posEstimator.est.aglAlt += posEstimator.imu.accelNEU.z * sq(ctx->dt) / 2.0f * accWeight;
-        posEstimator.est.aglVel += posEstimator.imu.accelNEU.z * ctx->dt * sq(accWeight);
+        posEstimator.est.aglAlt += (posEstimator.imu.accelNEU.z) * sq(ctx->dt) / 2.0f * accWeight;
+        posEstimator.est.aglVel += (posEstimator.imu.accelNEU.z) * ctx->dt * sq(accWeight);
 
         // Apply correction
         if (posEstimator.est.aglQual == SURFACE_QUAL_HIGH) {
             // Correct estimate from rangefinder
             const float surfaceResidual = posEstimator.surface.alt - posEstimator.est.aglAlt;
+            const float surfaceRoCResidual = posEstimator.surface.roc - posEstimator.est.aglVel;
+              
+            // TODO - the 75.0 should be in config - this gives bell curve of 75 cm width so result will be about 1.0 all the time
             const float bellCurveScaler = scaleRangef(bellCurve(surfaceResidual, 75.0f), 0.0f, 1.0f, 0.1f, 1.0f);
 
             posEstimator.est.aglAlt += surfaceResidual * positionEstimationConfig()->w_z_surface_p * bellCurveScaler * posEstimator.surface.reliability * ctx->dt;
-            posEstimator.est.aglVel += surfaceResidual * positionEstimationConfig()->w_z_surface_v * sq(bellCurveScaler) * sq(posEstimator.surface.reliability) * ctx->dt;
+            posEstimator.est.aglVel += surfaceRoCResidual * positionEstimationConfig()->w_z_surface_v * sq(bellCurveScaler) * sq(posEstimator.surface.reliability) * ctx->dt;
+            // posEstimator.est.aglVel = 0.0; // TODO - FLUFFY - REMOVE 
 
             // Update estimate offset
             if ((posEstimator.est.aglQual == SURFACE_QUAL_HIGH) && (posEstimator.est.epv < positionEstimationConfig()->max_eph_epv)) {
@@ -172,11 +201,17 @@ void estimationCalculateAGL(estimationContext_t * ctx)
             // Correct estimate from altitude fused from rangefinder and global altitude
             const float estAltResidual = (posEstimator.est.pos.z - posEstimator.est.aglOffset) - posEstimator.est.aglAlt;
             const float surfaceResidual = posEstimator.surface.alt - posEstimator.est.aglAlt;
+
+            const float estAltRoCResidual = posEstimator.est.vel.z - posEstimator.est.aglVel;
+            const float surfaceRoCResidual = posEstimator.surface.roc - posEstimator.est.aglVel;
+            
             const float surfaceWeightScaler = scaleRangef(bellCurve(surfaceResidual, 50.0f), 0.0f, 1.0f, 0.1f, 1.0f) * posEstimator.surface.reliability;
+
             const float mixedResidual = surfaceResidual * surfaceWeightScaler + estAltResidual * (1.0f - surfaceWeightScaler);
+            const float mixedRoCResidual = surfaceRoCResidual * surfaceWeightScaler + estAltRoCResidual * (1.0f - surfaceWeightScaler);
 
             posEstimator.est.aglAlt += mixedResidual * positionEstimationConfig()->w_z_surface_p * ctx->dt;
-            posEstimator.est.aglVel += mixedResidual * positionEstimationConfig()->w_z_surface_v * ctx->dt;
+            posEstimator.est.aglVel += mixedRoCResidual * positionEstimationConfig()->w_z_surface_v * ctx->dt;
         }
         else {  // SURFACE_QUAL_LOW
             // In this case rangefinder can't be trusted - simply use global altitude
@@ -195,12 +230,22 @@ void estimationCalculateAGL(estimationContext_t * ctx)
     DEBUG_SET(DEBUG_AGL, 2, posEstimator.est.aglAlt);
     DEBUG_SET(DEBUG_AGL, 3, posEstimator.est.aglVel);
 
+    DEBUG_SET(DEBUG_AGL, 4, posEstimator.surface.alt);
+    DEBUG_SET(DEBUG_AGL, 5,  posEstimator.surface.roc);
+
+    DEBUG_SET(DEBUG_AGL, 6, accWeight );
+    DEBUG_SET(DEBUG_AGL, 7, posEstimator.imu.accelNEU.z  );
+
 #else
     UNUSED(ctx);
     posEstimator.est.aglAlt = posEstimator.est.pos.z;
     posEstimator.est.aglVel = posEstimator.est.vel.z;
     posEstimator.est.aglQual = SURFACE_QUAL_LOW;
 #endif
+
+    //LOG_D( RANGE , "nav posEstimator.surface.alt = %f " ,  (double)posEstimator.surface.alt );
+    //LOG_D( RANGE , "nav posEstimator.est.aglAlt = %f" ,  (double)posEstimator.est.aglAlt);
+    //LOG_D( RANGE , "nav posEstimator.est.aglQual = %f" ,  (double)posEstimator.est.aglQual );
 }
 
 #endif  // NAV

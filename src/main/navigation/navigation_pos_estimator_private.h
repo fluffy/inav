@@ -97,6 +97,7 @@ typedef struct {
     timeUs_t    lastUpdateTime; // Last update time (us)
     pt1Filter_t avgFilter;
     float       alt;            // Raw altitude measurement (cm)
+    float       roc;            // Raw rate of climb measurement (cm/sec)
     float       reliability;
 } navPositionEstimatorSURFACE_t;
 
