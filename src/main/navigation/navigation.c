@@ -874,8 +874,7 @@ navigationFSMStateFlags_t navGetCurrentStateFlags(void)
 
 static bool navTerrainFollowingRequested(void)
 {
-    // Terrain following not supported on FIXED WING aircraft yet
-    return !STATE(FIXED_WING_LEGACY) && IS_RC_MODE_ACTIVE(BOXSURFACE);
+    return  IS_RC_MODE_ACTIVE(BOXSURFACE);
 }
 
 /*************************************************************************************************/
